@@ -1,0 +1,8 @@
+# Trae 分享缓存，不纳入版本管理
+.trae-html-share-packages/
+
+# 系统与编辑器杂项
+Thumbs.db
+desktop.ini
+.DS_Store
+*.tmp

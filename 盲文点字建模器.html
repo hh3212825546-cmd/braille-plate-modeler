@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>盲文点字建模器 · 参数化生成 STL</title>
+<style>
+  :root{
+    --bg:#f4f5f8; --card:#ffffff; --line:#e3e6ee; --ink:#1d2331; --muted:#7a839a;
+    --accent:#3b5bdb; --accent-soft:#e8ecfd; --ok:#0f9d58;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    font-family:"Microsoft YaHei","PingFang SC",system-ui,sans-serif;
+    background:var(--bg); color:var(--ink); font-size:13px; line-height:1.6;
+  }
+  .app{display:grid;grid-template-columns:372px 1fr;min-height:100vh}
+  aside{background:var(--card);border-right:1px solid var(--line);padding:22px 20px 40px;overflow:auto}
+  h1{font-size:17px;margin:0 0 4px;letter-spacing:.3px}
+  .sub{color:var(--muted);font-size:12px;margin:0 0 20px}
+  section{margin-bottom:18px}
+  .lab{display:block;font-size:12px;font-weight:700;color:#414a63;margin-bottom:7px;letter-spacing:.4px}
+  textarea,input[type=number],input[type=text]{
+    width:100%;border:1px solid var(--line);border-radius:9px;padding:9px 11px;
+    font-family:ui-monospace,Consolas,monospace;font-size:13px;color:var(--ink);
+    background:#fbfbfd;outline:none;transition:.15s;
+  }
+  textarea:focus,input:focus{border-color:var(--accent);background:#fff;box-shadow:0 0 0 3px var(--accent-soft)}
+  textarea{resize:vertical;line-height:1.5}
+  .hint{font-size:11.5px;color:var(--muted);margin-top:6px}
+  .hint code{background:#f0f2f7;padding:1px 4px;border-radius:4px;font-size:11px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:9px 10px}
+  .field span{display:block;font-size:11px;color:var(--muted);margin-bottom:3px}
+  .check{display:flex;align-items:center;gap:7px;margin-top:11px;font-size:12px;color:#414a63;cursor:pointer;user-select:none}
+  .check input{accent-color:var(--accent)}
+  .actions{display:flex;gap:9px;margin-top:6px}
+  button{font-family:inherit;font-size:13px;border:1px solid var(--line);background:#fff;color:var(--ink);
+    border-radius:9px;padding:9px 14px;cursor:pointer;transition:.15s}
+  button:hover{background:#f7f8fc}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700;flex:1}
+  button.primary:hover{background:#3450c4}
+  .meta{margin-top:12px;font-size:11.5px;color:var(--muted);font-family:ui-monospace,Consolas,monospace}
+  .meta b{color:var(--ink);font-weight:600}
+
+  /* 点位编辑 */
+  .editor{display:flex;flex-wrap:wrap;gap:12px}
+  .cell{display:flex;flex-direction:column;align-items:center;gap:5px;
+    border:1px dashed #e0e4ed;border-radius:10px;padding:8px 8px 6px;background:#fbfbfd}
+  .pad{display:grid;grid-template-columns:repeat(2,34px);grid-template-rows:repeat(3,34px);gap:5px}
+  .pad button{padding:0;border-radius:8px;font-size:11px;color:#b9c0d2;
+    background:#fff;border:1px solid #e6e9f1;position:relative}
+  .pad button.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700;
+    box-shadow:0 2px 6px rgba(59,91,219,.35)}
+  .pad button.bad{border-style:dashed;border-color:#e08484;color:#e08484}
+  .clabel{font-size:10.5px;color:var(--muted);font-family:ui-monospace,Consolas,monospace;
+    max-width:78px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  main{padding:22px 24px 40px;display:flex;flex-direction:column;gap:16px;min-width:0}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px 16px;
+    box-shadow:0 1px 2px rgba(20,30,60,.03)}
+  .card-h{display:flex;align-items:baseline;justify-content:space-between;font-weight:700;font-size:13px;
+    margin-bottom:10px;color:#414a63}
+  .tip{font-weight:400;font-size:11px;color:var(--muted)}
+  #view{width:100%;height:380px;display:block;border-radius:10px;background:
+    radial-gradient(120% 90% at 30% 0%,#ffffff 0%,#eff1f7 60%,#e6e9f2 100%);cursor:grab;touch-action:none}
+  #view:active{cursor:grabbing}
+  .ref{display:grid;grid-template-columns:1fr 1fr;gap:14px;font-size:11.5px;max-height:190px;overflow:auto}
+  .ref h4{margin:0 0 6px;font-size:11.5px;color:var(--muted);font-weight:700;letter-spacing:.5px}
+  .chips{display:flex;flex-wrap:wrap;gap:5px}
+  .chip{background:#f2f4fa;border:1px solid #e4e8f2;border-radius:6px;padding:2px 6px;
+    font-family:ui-monospace,Consolas,monospace;color:#3d465e;white-space:nowrap}
+  .chip b{color:var(--accent);font-weight:700}
+  @media (max-width:900px){.app{grid-template-columns:1fr}aside{border-right:none;border-bottom:1px solid var(--line)}main{padding:16px}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <h1>盲文点字建模器</h1>
+    <p class="sub">输入拼音 / 字母 / 点位数 → 生成 2×3 凸点盲文板 → 导出 STL</p>
+
+    <section>
+      <label class="lab" for="txt">内容（空格分音节；也可直接写点位）</label>
+      <textarea id="txt" rows="2" spellcheck="false">zeng xin</textarea>
+      <div class="hint">例：<code>zeng xin</code> 或 <code>1356 3456 125 126</code>；ü 可写 v；音节后可加声调 1-4</div>
+    </section>
+
+    <section>
+      <div class="lab">点位（点击圆点可手动增删）</div>
+      <div id="editor" class="editor"></div>
+    </section>
+
+    <section>
+      <div class="lab">参数（mm）</div>
+      <div class="grid2">
+        <label class="field"><span>点距</span><input id="p-pitch" type="number" step="0.1" min="1.5" value="2.5"></label>
+        <label class="field"><span>点径</span><input id="p-dotD" type="number" step="0.1" min="0.6" value="1.6"></label>
+        <label class="field"><span>点高</span><input id="p-dotH" type="number" step="0.1" min="0.2" value="0.6"></label>
+        <label class="field"><span>字间距</span><input id="p-gap" type="number" step="0.1" min="0.5" value="3.5"></label>
+        <label class="field"><span>板厚</span><input id="p-thick" type="number" step="0.1" min="0.6" value="1.5"></label>
+        <label class="field"><span>板边距</span><input id="p-margin" type="number" step="0.1" min="0.5" value="2"></label>
+        <label class="field"><span>每行格数</span><input id="p-perRow" type="number" step="1" min="1" value="8"></label>
+      </div>
+      <label class="check"><input id="p-mirror" type="checkbox"> 镜像（打印反模 / 压印模具时用）</label>
+    </section>
+
+    <div class="actions">
+      <button id="download" class="primary">下载 STL</button>
+      <button id="reset">恢复默认</button>
+    </div>
+    <div id="meta" class="meta"></div>
+  </aside>
+
+  <main>
+    <div class="card">
+      <div class="card-h"><span>3D 预览</span><span class="tip">拖动旋转 · 滚轮缩放</span></div>
+      <canvas id="view"></canvas>
+    </div>
+    <div class="card">
+      <div class="card-h"><span>点位对照表（现行盲文）</span><span class="tip">数字即点位</span></div>
+      <div class="ref" id="ref"></div>
+    </div>
+  </main>
+</div>
+
+<script>
+/* ========================= CORE_START ========================= */
+/* 现行盲文点位：声母 / 韵母 / 声调 */
+const INITIALS = {
+  zh:'34', ch:'12345', sh:'156', r:'245', z:'1356', c:'14', s:'234',
+  b:'12', p:'1234', m:'134', f:'124', d:'145', t:'2345', n:'1345', l:'123',
+  g:'1245', j:'1245', k:'13', q:'13', h:'125', x:'125'
+};
+const FINALS = {
+  a:'35', o:'26', e:'26', i:'24', u:'136', v:'346', er:'1235',
+  ai:'246', ao:'235', ei:'2346', ou:'12356',
+  ia:'1246', iao:'345', ie:'15', iu:'1256',
+  ua:'123456', uai:'13456', ui:'2456', uo:'135', ve:'23456',
+  an:'1236', ang:'236', en:'356', eng:'3456',
+  ian:'146', iang:'1346', in:'126', ing:'16',
+  uan:'12456', uang:'2356', un:'25', ong:'256', van:'12346', vn:'456', iong:'1456'
+};
+/* y / w 开头的零声母音节 */
+const YW = {
+  yi:'i', ya:'ia', yao:'iao', ye:'ie', you:'iu', yan:'ian', yin:'in',
+  yang:'iang', ying:'ing', yong:'iong', yu:'v', yue:'ve', yuan:'van', yun:'vn', y:'i',
+  wu:'u', wa:'ua', wo:'uo', wai:'uai', wei:'ui', wan:'uan', wen:'un',
+  wang:'uang', weng:'ong', w:'u'
+};
+const TONES = { 1:'1', 2:'2', 3:'3', 4:'23' };
+
+/* 把一个音节拆成 声母 / 韵母 两格盲文 */
+function syllableCells(s){
+  s = s.replace(/ü/g, 'v').replace(/u:/g, 'v');
+  let ini = null, rest = null;
+  for (const k of ['zh', 'ch', 'sh']) {
+    if (s.startsWith(k)) { ini = k; rest = s.slice(2); break; }
+  }
+  if (!ini && s.length > 1 && INITIALS[s[0]]) { ini = s[0]; rest = s.slice(1); }
+  if (ini) {
+    // j q x 后的 u 实为 ü
+    if ('jqx'.includes(ini) && rest.startsWith('u')) rest = 'v' + rest.slice(1);
+    if (rest === '') return [{ dots: INITIALS[ini], label: ini }];
+    // zh ch sh r z c s 与 i 相拼时 i 省略
+    if (rest === 'i' && ['zh', 'ch', 'sh', 'r', 'z', 'c', 's'].includes(ini))
+      return [{ dots: INITIALS[ini], label: ini }];
+    if (FINALS[rest]) return [{ dots: INITIALS[ini], label: ini }, { dots: FINALS[rest], label: rest }];
+    return null;
+  }
+  const k = YW[s];
+  if (k && FINALS[k]) return [{ dots: FINALS[k], label: s }];
+  if (FINALS[s]) return [{ dots: FINALS[s], label: s }];
+  return null;
+}
+
+/* 解析输入：点位数 或 拼音 */
+function parseText(text){
+  const out = [];
+  const tokens = String(text).trim().split(/[\s,，、;；|/]+/).filter(Boolean);
+  for (const raw of tokens) {
+    if (/^[1-6]+$/.test(raw)) {
+      const dots = [...new Set(raw.split(''))].sort().join('');
+      out.push({ dots, label: dots });
+      continue;
+    }
+    const m = raw.toLowerCase().match(/^([a-zü:]+)([1-4])?$/);
+    if (!m) { out.push({ dots: '', label: raw, bad: true }); continue; }
+    const cells = syllableCells(m[1]);
+    if (!cells) { out.push({ dots: '', label: raw, bad: true }); continue; }
+    cells.forEach(c => out.push(c));
+    if (m[2]) out.push({ dots: TONES[m[2]], label: '声调' + m[2] });
+  }
+  return out;
+}
+
+/* ---------------------- 几何 ---------------------- */
+const SEG = 18, RINGS = 6, EMBED = 0.35;
+
+function pushTri(tris, a, b, c){
+  tris.push([a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]]);
+}
+
+function addBox(tris, W, D, H){
+  const p = (x, y, z) => [x, y, z];
+  // 顶面
+  pushTri(tris, p(0,0,H), p(W,0,H), p(W,D,H));
+  pushTri(tris, p(0,0,H), p(W,D,H), p(0,D,H));
+  // 底面
+  pushTri(tris, p(0,0,0), p(W,D,0), p(W,0,0));
+  pushTri(tris, p(0,0,0), p(0,D,0), p(W,D,0));
+  // y = 0
+  pushTri(tris, p(0,0,0), p(W,0,H), p(0,0,H));
+  pushTri(tris, p(0,0,0), p(W,0,0), p(W,0,H));
+  // y = D
+  pushTri(tris, p(0,D,0), p(0,D,H), p(W,D,H));
+  pushTri(tris, p(0,D,0), p(W,D,H), p(W,D,0));
+  // x = 0
+  pushTri(tris, p(0,0,0), p(0,D,H), p(0,D,0));
+  pushTri(tris, p(0,0,0), p(0,0,H), p(0,D,H));
+  // x = W
+  pushTri(tris, p(W,0,0), p(W,D,0), p(W,D,H));
+  pushTri(tris, p(W,0,0), p(W,D,H), p(W,0,H));
+}
+
+function ringAt(cx, cy, r, z){
+  const out = [];
+  for (let i = 0; i < SEG; i++) {
+    const a = i / SEG * Math.PI * 2;
+    out.push([cx + r * Math.cos(a), cy + r * Math.sin(a), z]);
+  }
+  return out;
+}
+
+/* 单个凸点：圆柱底段（嵌入板体，保证与板重叠成实体）+ 椭球面凸包 */
+function addDot(tris, cx, cy, r, zTop, h){
+  const z0 = zTop - EMBED;
+  const rings = [ ringAt(cx, cy, r, z0), ringAt(cx, cy, r, zTop) ];
+  for (let k = 1; k < RINGS; k++) {
+    const a = (k / RINGS) * Math.PI / 2;
+    rings.push(ringAt(cx, cy, r * Math.cos(a), zTop + h * Math.sin(a)));
+  }
+  // 底盖（法向 -Z）
+  const c0 = [cx, cy, z0], bottom = rings[0];
+  for (let i = 0; i < SEG; i++) {
+    const j = (i + 1) % SEG;
+    pushTri(tris, c0, bottom[j], bottom[i]);
+  }
+  // 侧壁
+  for (let k = 0; k < rings.length - 1; k++) {
+    const A = rings[k], B = rings[k + 1];
+    for (let i = 0; i < SEG; i++) {
+      const j = (i + 1) % SEG;
+      pushTri(tris, A[i], A[j], B[i]);
+      pushTri(tris, A[j], B[j], B[i]);
+    }
+  }
+  // 顶点扇形
+  const apex = [cx, cy, zTop + h], last = rings[rings.length - 1];
+  for (let i = 0; i < SEG; i++) {
+    const j = (i + 1) % SEG;
+    pushTri(tris, apex, last[i], last[j]);
+  }
+}
+
+function buildGeometry(cells, p){
+  const dotR = p.dotD / 2;
+  const pad = dotR + 0.5;                     // 点中心到格子边缘
+  const cellW = p.pitch + 2 * pad;
+  const cellH = 2 * p.pitch + 2 * pad;
+  const perRow = Math.max(1, Math.round(p.perRow));
+  const n = Math.max(1, cells.length);
+  const cols = Math.min(perRow, n);
+  const rows = Math.ceil(n / cols);
+  const W = cols * cellW + (cols - 1) * p.gap + 2 * p.margin;
+  const D = rows * cellH + (rows - 1) * p.gap + 2 * p.margin;
+  const T = p.thick;
+  const tris = [];
+
+  addBox(tris, W, D, T);
+
+  cells.forEach((cell, i) => {
+    const c = i % cols, r = Math.floor(i / cols);
+    const cx0 = p.margin + c * (cellW + p.gap);
+    const cy0 = p.margin + (rows - 1 - r) * (cellH + p.gap);
+    for (const ch of cell.dots) {
+      const d = +ch;
+      if (!(d >= 1 && d <= 6)) continue;
+      const col = d <= 3 ? 0 : 1;
+      const row = (d - 1) % 3;
+      addDot(tris,
+        cx0 + pad + col * p.pitch,
+        cy0 + pad + (2 - row) * p.pitch,
+        dotR, T, p.dotH);
+    }
+  });
+
+  if (p.mirror) {
+    for (const t of tris) {
+      for (let i = 0; i < 9; i += 3) t[i] = W - t[i];
+      for (let i = 0; i < 3; i++) { const tmp = t[i]; t[i] = t[3 + i]; t[3 + i] = tmp; }
+    }
+  }
+  return { tris, W, D, H: T + p.dotH, cols, rows };
+}
+
+/* 二进制 STL */
+function buildSTL(tris){
+  const n = tris.length;
+  const buf = new ArrayBuffer(84 + n * 50);
+  const dv = new DataView(buf);
+  const head = new TextEncoder().encode('Braille tactile plate generator');
+  new Uint8Array(buf, 0, head.length).set(head);
+  dv.setUint32(80, n, true);
+  let o = 84;
+  for (const t of tris) {
+    const ux = t[3] - t[0], uy = t[4] - t[1], uz = t[5] - t[2];
+    const vx = t[6] - t[0], vy = t[7] - t[1], vz = t[8] - t[2];
+    let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    const len = Math.hypot(nx, ny, nz) || 1;
+    dv.setFloat32(o, nx / len, true);
+    dv.setFloat32(o + 4, ny / len, true);
+    dv.setFloat32(o + 8, nz / len, true);
+    o += 12;
+    for (let k = 0; k < 9; k++) { dv.setFloat32(o, t[k], true); o += 4; }
+    dv.setUint16(o, 0, true); o += 2;
+  }
+  return buf;
+}
+/* ========================= CORE_END ========================= */
+
+/* ---------------------- 界面 ---------------------- */
+const $ = id => document.getElementById(id);
+const PARAM_IDS = ['pitch','dotD','dotH','gap','thick','margin','perRow'];
+const DEFAULTS = { pitch:2.5, dotD:1.6, dotH:0.6, gap:3.5, thick:1.5, margin:2, perRow:8 };
+
+let cells = [];
+let geo = null;
+let cam = { yaw: -0.55, elev: 0.62, zoom: 1 };
+let drag = null;
+
+function readParams(){
+  const p = {};
+  for (const k of PARAM_IDS) {
+    const v = parseFloat($('p-' + k).value);
+    p[k] = Number.isFinite(v) && v > 0 ? v : DEFAULTS[k];
+  }
+  p.perRow = Math.max(1, Math.round(p.perRow));
+  p.mirror = $('p-mirror').checked;
+  return p;
+}
+
+function renderEditor(){
+  const box = $('editor');
+  box.innerHTML = '';
+  if (!cells.length) {
+    box.innerHTML = '<div class="hint">还没有内容，先在上方输入拼音或点位。</div>';
+    return;
+  }
+  cells.forEach((cell) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'cell';
+    const pad = document.createElement('div');
+    pad.className = 'pad';
+    for (let r = 0; r < 3; r++) {
+      for (let c = 0; c < 2; c++) {
+        const d = 1 + r + 3 * c;
+        const btn = document.createElement('button');
+        const on = cell.dots.includes(String(d));
+        btn.textContent = d;
+        btn.className = (on ? 'on ' : '') + (cell.bad ? 'bad' : '');
+        btn.title = '点位 ' + d;
+        btn.addEventListener('click', () => {
+          const set = new Set(cell.dots.split(''));
+          if (set.has(String(d))) set.delete(String(d)); else set.add(String(d));
+          cell.dots = [...set].sort().join('');
+          cell.bad = false;
+          cell.dots.length ? null : null;
+          renderEditor();
+          rebuild();
+        });
+        pad.appendChild(btn);
+      }
+    }
+    const lab = document.createElement('div');
+    lab.className = 'clabel';
+    lab.textContent = cell.label || '?';
+    wrap.appendChild(pad);
+    wrap.appendChild(lab);
+    box.appendChild(wrap);
+  });
+}
+
+function rebuild(){
+  geo = buildGeometry(cells, readParams());
+  draw3D();
+  const n = cells.length;
+  $('meta').innerHTML =
+    '外形 <b>' + geo.W.toFixed(1) + ' × ' + geo.D.toFixed(1) + ' × ' + geo.H.toFixed(1) + '</b> mm<br>' +
+    '格数 <b>' + n + '</b>（' + geo.cols + ' 列 × ' + geo.rows + ' 行）· 面数 <b>' + geo.tris.length + '</b>';
+}
+
+function parseNow(){
+  cells = parseText($('txt').value);
+  renderEditor();
+  rebuild();
+}
+
+/* ---------- 3D 预览 ---------- */
+const canvas = $('view');
+const ctx = canvas.getContext('2d');
+
+function fitCanvas(){
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  canvas.width = Math.round(w * dpr);
+  canvas.height = Math.round(h * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function draw3D(){
+  if (!geo) return;
+  fitCanvas();
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  ctx.clearRect(0, 0, W, H);
+
+  const A = cam.yaw, E = cam.elev;
+  const cA = Math.cos(A), sA = Math.sin(A), cE = Math.cos(E), sE = Math.sin(E);
+  const cx = geo.W / 2, cy = geo.D / 2, cz = geo.H / 2;
+
+  const view = [];
+  for (const t of geo.tris) {
+    const v = new Array(9);
+    for (let i = 0; i < 9; i += 3) {
+      const x = t[i] - cx, y = t[i + 1] - cy, z = t[i + 2] - cz;
+      const qx = x * cA - y * sA;
+      const qy = x * sA + y * cA;
+      v[i] = qx;
+      v[i + 1] = qy * sE - z * cE;
+      v[i + 2] = z * cE + qy * sE;   // 深度：越大越靠近视点
+    }
+    view.push(v);
+  }
+
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const v of view) for (let i = 0; i < 9; i += 3) {
+    if (v[i] < minX) minX = v[i]; if (v[i] > maxX) maxX = v[i];
+    if (v[i + 1] < minY) minY = v[i + 1]; if (v[i + 1] > maxY) maxY = v[i + 1];
+  }
+  const spanX = Math.max(maxX - minX, 1e-3), spanY = Math.max(maxY - minY, 1e-3);
+  const s = Math.min(W * 0.86 / spanX, H * 0.86 / spanY) * cam.zoom;
+  const ox = W / 2 - (minX + maxX) / 2 * s;
+  const oy = H / 2 - (minY + maxY) / 2 * s;
+
+  const L = [-0.35, -0.45, 0.82];
+  const Ll = Math.hypot(...L);
+
+  const order = view.map((v, i) => i);
+  order.sort((a, b) => {
+    const da = view[a][2] + view[a][5] + view[a][8];
+    const db = view[b][2] + view[b][5] + view[b][8];
+    return da - db;
+  });
+
+  for (const idx of order) {
+    const v = view[idx];
+    const ux = v[3] - v[0], uy = v[4] - v[1], uz = v[5] - v[2];
+    const vx = v[6] - v[0], vy = v[7] - v[1], vz = v[8] - v[2];
+    let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    const nl = Math.hypot(nx, ny, nz) || 1;
+    nx /= nl; ny /= nl; nz /= nl;
+    if (nz < 0) { nx = -nx; ny = -ny; nz = -nz; }
+    const lam = Math.max(0, (nx * L[0] + ny * L[1] + nz * L[2]) / Ll);
+    const k = 0.34 + 0.66 * Math.pow(lam, 0.85);
+    const r = Math.round(122 * k), g = Math.round(134 * k), b = Math.round(168 * k);
+    ctx.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')';
+    ctx.beginPath();
+    ctx.moveTo(ox + v[0] * s, oy + v[1] * s);
+    ctx.lineTo(ox + v[3] * s, oy + v[4] * s);
+    ctx.lineTo(ox + v[6] * s, oy + v[7] * s);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
+canvas.addEventListener('pointerdown', e => {
+  drag = { x: e.clientX, y: e.clientY, yaw: cam.yaw, elev: cam.elev };
+  canvas.setPointerCapture(e.pointerId);
+});
+canvas.addEventListener('pointermove', e => {
+  if (!drag) return;
+  cam.yaw = drag.yaw + (e.clientX - drag.x) * 0.008;
+  cam.elev = Math.max(0.14, Math.min(1.5, drag.elev - (e.clientY - drag.y) * 0.006));
+  draw3D();
+});
+canvas.addEventListener('pointerup', () => { drag = null; });
+canvas.addEventListener('pointercancel', () => { drag = null; });
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  cam.zoom = Math.max(0.4, Math.min(3.2, cam.zoom * (e.deltaY > 0 ? 0.92 : 1.08)));
+  draw3D();
+}, { passive: false });
+
+/* ---------- 对照表 ---------- */
+function renderReference(){
+  const mk = (title, obj) => {
+    const div = document.createElement('div');
+    div.innerHTML = '<h4>' + title + '</h4>';
+    const chips = document.createElement('div');
+    chips.className = 'chips';
+    for (const k in obj) {
+      const c = document.createElement('span');
+      c.className = 'chip';
+      c.innerHTML = k + ' <b>' + obj[k] + '</b>';
+      chips.appendChild(c);
+    }
+    div.appendChild(chips);
+    return div;
+  };
+  const box = $('ref');
+  box.innerHTML = '';
+  box.appendChild(mk('声母', INITIALS));
+  box.appendChild(mk('韵母', FINALS));
+}
+
+/* ---------- 事件 ---------- */
+$('txt').addEventListener('input', parseNow);
+PARAM_IDS.forEach(k => $('p-' + k).addEventListener('input', rebuild));
+$('p-mirror').addEventListener('change', rebuild);
+
+$('download').addEventListener('click', () => {
+  if (!geo) return;
+  const buf = buildSTL(geo.tris);
+  const blob = new Blob([buf], { type: 'model/stl' });
+  const a = document.createElement('a');
+  const base = ($('txt').value.trim().replace(/[^\w\u4e00-\u9fa5]+/g, '_') || 'plate').slice(0, 40);
+  a.href = URL.createObjectURL(blob);
+  a.download = '盲文_' + base + '.stl';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+});
+
+$('reset').addEventListener('click', () => {
+  for (const k of PARAM_IDS) $('p-' + k).value = DEFAULTS[k];
+  $('p-mirror').checked = false;
+  cam = { yaw: -0.55, elev: 0.62, zoom: 1 };
+  rebuild();
+});
+
+window.addEventListener('resize', draw3D);
+
+renderReference();
+parseNow();
+</script>
+</body>
+</html>
